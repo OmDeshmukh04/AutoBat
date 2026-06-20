@@ -7,7 +7,7 @@ services:
     # Build the whole workspace from the repo root so the @autobat/contracts
     # workspace dependency is built (turbo `^build`) before the API, and the
     # Prisma client is generated against the deployed schema.
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @autobat/api build && pnpm --filter @autobat/api exec prisma generate
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @autobat/contracts build && pnpm --filter @autobat/api exec prisma generate && pnpm --filter @autobat/api build
     startCommand: node apps/api/dist/main.js
     healthCheckPath: /api/v1/health
     envVars:
