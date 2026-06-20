@@ -53,10 +53,14 @@ export const api = {
 
   // Reads
   inventory: () => request<InventoryUnit[]>("/inventory/units"),
+  movements: () => request<StockMovementRow[]>("/inventory/movements"),
   policies: () => request<PolicyRow[]>("/catalog/policies"),
   partners: () => request<PartnerRow[]>("/catalog/partners"),
+  products: () => request<ProductRow[]>("/catalog/products"),
   claims: () => request<ClaimRow[]>("/claims"),
   partnerSummary: () => request<PartnerSummary>("/dashboard/partner"),
+  activity: () => request<ActivityRow[]>("/dashboard/activity", { auth: false }),
+  backdatedQueue: () => request<BackdatedRow[]>("/warranties/backdated", { auth: false }),
   warrantyBySerial: (serialNumber: string) =>
     request<WarrantyDetail>(`/warranties/serial/${encodeURIComponent(serialNumber)}`),
 
@@ -72,7 +76,22 @@ export const api = {
   deliver: (serialNumber: string) =>
     request(`/ops/deliveries/${serialNumber}/deliver`, { method: "POST", body: {} }),
   decideClaim: (reference: string, stage: string) =>
-    request(`/ops/claims/${reference}`, { method: "PATCH", body: { stage } })
+    request(`/ops/claims/${reference}`, { method: "PATCH", body: { stage } }),
+  fileClaim: (body: {
+    serialNumber: string;
+    customerMobile: string;
+    reason: string;
+    remarks?: string;
+  }) =>
+    request<{ reference: string; stage: string; overSla: boolean }>("/claims", {
+      method: "POST",
+      body
+    }),
+  decideBackdated: (id: string, decision: "APPROVE" | "REJECT") =>
+    request<{ id: string; status: string }>(`/ops/backdated/${id}`, {
+      method: "PATCH",
+      body: { decision }
+    })
 };
 
 export type AuthUser = {
@@ -152,4 +171,43 @@ export type WarrantyDetail = {
   expiryDate: string;
   dealerName: string;
   dealerCode: string;
+};
+
+export type StockMovementRow = {
+  id: string;
+  type: string;
+  from: string;
+  to: string;
+  quantity: number;
+  reference: string;
+  at: string;
+};
+
+export type ProductRow = {
+  id: string;
+  sku: string;
+  name: string;
+  family: string;
+  voltage: string;
+  capacity: string;
+  policy: string;
+  active: boolean;
+};
+
+export type ActivityRow = {
+  id: string;
+  actor: string;
+  action: string;
+  entity: string;
+  entityType: string;
+  at: string;
+};
+
+export type BackdatedRow = {
+  id: string;
+  serialNumber: string;
+  partner: string;
+  purchaseDate: string;
+  delayDays: number;
+  reason: string;
 };

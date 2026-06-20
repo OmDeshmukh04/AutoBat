@@ -3,16 +3,25 @@ import {
   Bell,
   Boxes,
   ChevronLeft,
+  ClipboardCheck,
+  ClipboardPlus,
   Ellipsis,
   FileText,
+  History,
   Home,
+  LogOut,
   Menu,
+  PackageCheck,
   ShieldCheck,
+  ShoppingCart,
+  Truck,
+  X,
   type LucideIcon
 } from "lucide-react-native";
-import type { ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import { colors } from "./theme";
+import { useState, type ReactNode } from "react";
+import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { useAuthStore } from "./auth-store";
+import { colors, ROLE_LABEL } from "./theme";
 
 export function BrandWordmark() {
   return (
@@ -28,9 +37,15 @@ export function DashboardHeader({
 }: {
   notificationCount?: number;
 }) {
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
   return (
     <View style={styles.dashboardHeader}>
-      <Pressable accessibilityLabel="Open menu" style={styles.iconButton}>
+      <Pressable
+        accessibilityLabel="Open menu"
+        onPress={() => setDrawerOpen(true)}
+        style={styles.iconButton}
+      >
         <Menu color={colors.ink} size={24} strokeWidth={2} />
       </Pressable>
       <BrandWordmark />
@@ -44,6 +59,7 @@ export function DashboardHeader({
           </View>
         ) : null}
       </Pressable>
+      <AppDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </View>
   );
 }
@@ -56,6 +72,7 @@ export function DetailHeader({
   onBack?: () => void;
 }) {
   const router = useRouter();
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (
     <View style={styles.detailHeader}>
@@ -69,10 +86,115 @@ export function DetailHeader({
       <Text numberOfLines={1} style={styles.detailTitle}>
         {title}
       </Text>
-      <Pressable accessibilityLabel="More options" style={styles.iconButton}>
-        <Ellipsis color={colors.ink} size={24} strokeWidth={2} />
+      <Pressable
+        accessibilityLabel="Open menu"
+        onPress={() => setDrawerOpen(true)}
+        style={styles.iconButton}
+      >
+        <Menu color={colors.ink} size={24} strokeWidth={2} />
       </Pressable>
+      <AppDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </View>
+  );
+}
+
+// Screens reachable from the slide-out menu, with the roles allowed to use them.
+// Mirrors the server-side @Roles guards so users only see what they can do.
+type MenuEntry = {
+  label: string;
+  href: string;
+  icon: LucideIcon;
+  roles: string[];
+};
+
+const MENU_ENTRIES: MenuEntry[] = [
+  { label: "Dashboard", href: "/", icon: Home, roles: ["ADMIN", "DISTRIBUTOR", "DEALER", "DELIVERY", "SERVICE"] },
+  { label: "Register sale", href: "/sale", icon: ShoppingCart, roles: ["DEALER"] },
+  { label: "Check warranty", href: "/warranty", icon: ShieldCheck, roles: ["ADMIN", "DISTRIBUTOR", "DEALER", "SERVICE"] },
+  { label: "Inventory", href: "/inventory", icon: Boxes, roles: ["ADMIN", "DISTRIBUTOR", "DEALER", "DELIVERY"] },
+  { label: "Transfer stock", href: "/transfer", icon: PackageCheck, roles: ["DISTRIBUTOR", "DEALER"] },
+  { label: "Confirm delivery", href: "/deliver", icon: Truck, roles: ["DELIVERY"] },
+  { label: "Claims", href: "/claims", icon: FileText, roles: ["ADMIN", "DISTRIBUTOR", "DEALER", "SERVICE"] },
+  { label: "File a claim", href: "/file-claim", icon: ClipboardPlus, roles: ["DEALER", "DISTRIBUTOR"] },
+  { label: "Backdated approvals", href: "/backdated", icon: ClipboardCheck, roles: ["ADMIN"] },
+  { label: "Products", href: "/products", icon: Boxes, roles: ["ADMIN", "DISTRIBUTOR", "DEALER", "SERVICE"] },
+  { label: "Activity", href: "/activity", icon: History, roles: ["ADMIN", "DISTRIBUTOR", "DEALER", "SERVICE"] }
+];
+
+export function AppDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const router = useRouter();
+  const user = useAuthStore((s) => s.user);
+  const signOut = useAuthStore((s) => s.signOut);
+
+  const role = user?.role ?? "";
+  // If role is unknown (not yet hydrated), show everything rather than an empty menu.
+  const entries = role
+    ? MENU_ENTRIES.filter((e) => e.roles.includes(role))
+    : MENU_ENTRIES;
+
+  const go = (href: string) => {
+    onClose();
+    router.push(href as never);
+  };
+
+  const handleSignOut = async () => {
+    onClose();
+    await signOut();
+    router.replace("/login" as never);
+  };
+
+  return (
+    <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.drawerBackdrop} onPress={onClose} />
+      <View style={styles.drawerPanel}>
+        <View style={styles.drawerHeader}>
+          <View style={styles.drawerAvatar}>
+            <Text style={styles.drawerAvatarText}>
+              {(user?.name ?? "AB").slice(0, 2).toUpperCase()}
+            </Text>
+          </View>
+          <View style={styles.drawerIdentity}>
+            <Text numberOfLines={1} style={styles.drawerName}>
+              {user?.name ?? "AutoBat Partner"}
+            </Text>
+            <Text numberOfLines={1} style={styles.drawerRole}>
+              {ROLE_LABEL[role] ?? role ?? "—"}
+              {user?.orgName ? ` · ${user.orgName}` : ""}
+            </Text>
+          </View>
+          <Pressable accessibilityLabel="Close menu" onPress={onClose} style={styles.iconButton}>
+            <X color={colors.inkSoft} size={22} strokeWidth={2} />
+          </Pressable>
+        </View>
+
+        <View style={styles.drawerList}>
+          {entries.map((entry) => {
+            const Icon = entry.icon;
+            return (
+              <Pressable
+                key={entry.href}
+                onPress={() => go(entry.href)}
+                style={({ pressed }) => [
+                  styles.drawerItem,
+                  pressed && styles.drawerItemPressed
+                ]}
+              >
+                <Icon color={colors.ink} size={21} strokeWidth={2} />
+                <Text style={styles.drawerItemLabel}>{entry.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <Pressable
+          onPress={handleSignOut}
+          style={({ pressed }) => [styles.drawerSignOut, pressed && styles.drawerItemPressed]}
+        >
+          <LogOut color={colors.brand} size={20} strokeWidth={2} />
+          <Text style={styles.drawerSignOutLabel}>Sign out</Text>
+        </Pressable>
+      </View>
+    </Modal>
   );
 }
 
@@ -81,29 +203,35 @@ type NavKey = "home" | "inventory" | "claims" | "more";
 const NAV_ITEMS: Array<{
   key: NavKey;
   label: string;
-  href: string;
+  href?: string;
   icon: LucideIcon;
 }> = [
   { key: "home", label: "Home", href: "/", icon: Home },
   { key: "inventory", label: "Inventory", href: "/inventory", icon: Boxes },
   { key: "claims", label: "Claims", href: "/claims", icon: FileText },
-  { key: "more", label: "More", href: "/transfer", icon: Ellipsis }
+  // "More" opens the full role-aware drawer instead of a single hard-coded route.
+  { key: "more", label: "More", icon: Ellipsis }
 ];
 
 export function BottomNav({ active }: { active: NavKey }) {
   const router = useRouter();
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (
     <View style={styles.bottomNav}>
       {NAV_ITEMS.map((item) => {
         const selected = item.key === active;
         const Icon = item.icon;
+        const onPress =
+          item.key === "more"
+            ? () => setDrawerOpen(true)
+            : () => router.push(item.href as never);
         return (
           <Pressable
             accessibilityRole="button"
             accessibilityState={{ selected }}
             key={item.key}
-            onPress={() => router.push(item.href as never)}
+            onPress={onPress}
             style={styles.navItem}
           >
             <Icon
@@ -118,6 +246,7 @@ export function BottomNav({ active }: { active: NavKey }) {
           </Pressable>
         );
       })}
+      <AppDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </View>
   );
 }
@@ -354,5 +483,91 @@ const styles = StyleSheet.create({
     height: 48,
     justifyContent: "center",
     width: 48
+  },
+  drawerBackdrop: {
+    backgroundColor: "rgba(0,0,0,0.4)",
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0
+  },
+  drawerPanel: {
+    backgroundColor: colors.surface,
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    top: 0,
+    width: "80%",
+    maxWidth: 320
+  },
+  drawerHeader: {
+    alignItems: "center",
+    backgroundColor: colors.surfaceSoft,
+    borderBottomColor: colors.line,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 22
+  },
+  drawerAvatar: {
+    alignItems: "center",
+    backgroundColor: colors.brand,
+    borderRadius: 22,
+    height: 44,
+    justifyContent: "center",
+    width: 44
+  },
+  drawerAvatarText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "800"
+  },
+  drawerIdentity: {
+    flex: 1
+  },
+  drawerName: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "800"
+  },
+  drawerRole: {
+    color: colors.inkSoft,
+    fontSize: 12.5,
+    marginTop: 2
+  },
+  drawerList: {
+    paddingTop: 8
+  },
+  drawerItem: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 14,
+    minHeight: 52,
+    paddingHorizontal: 20
+  },
+  drawerItemPressed: {
+    backgroundColor: colors.surfaceSoft
+  },
+  drawerItemLabel: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "600"
+  },
+  drawerSignOut: {
+    alignItems: "center",
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    gap: 14,
+    marginTop: "auto",
+    minHeight: 56,
+    paddingHorizontal: 20
+  },
+  drawerSignOutLabel: {
+    color: colors.brand,
+    fontSize: 15,
+    fontWeight: "800"
   }
 });

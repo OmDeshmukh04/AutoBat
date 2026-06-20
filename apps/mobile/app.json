@@ -4,15 +4,29 @@
     "slug": "autobat-partner",
     "scheme": "autobat",
     "version": "0.1.0",
-    "platforms": ["android", "ios"],
+    "platforms": [
+      "android",
+      "ios",
+      "web"
+    ],
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "plugins": ["expo-router", "expo-secure-store", "expo-sqlite"],
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-sqlite"
+    ],
     "android": {
       "package": "com.autobat.partner"
     },
     "ios": {
       "bundleIdentifier": "com.autobat.partner"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "e80860eb-d68d-40bf-99bd-cafe26e12b17"
+      }
     }
   }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "expo-router";
 import {
   AlertTriangle,
@@ -44,18 +44,34 @@ const EMPTY_SUMMARY: PartnerSummary = {
 export default function HomeScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  const setUser = useAuthStore((state) => state.setUser);
   const [summary, setSummary] = useState<PartnerSummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setError(null);
+    setSummary(null);
+    // Refresh profile and partner summary independently so one failing does not
+    // hide the other, and surface a real message instead of silently zeroing out.
+    void api
+      .me()
+      .then((profile) => void setUser(profile))
+      .catch(() => {
+        /* profile refresh is best-effort; persisted user still drives the UI */
+      });
+    void api
+      .partnerSummary()
+      .then(setSummary)
+      .catch((e) => setError((e as Error).message));
+  }, [setUser]);
 
   useEffect(() => {
-    void Promise.all([
-      api.me().then((profile) => useAuthStore.setState({ user: profile })),
-      api.partnerSummary().then(setSummary)
-    ]).catch(() => setSummary(EMPTY_SUMMARY));
-  }, []);
+    load();
+  }, [load]);
 
   const values = summary ?? EMPTY_SUMMARY;
   const organization = user?.orgName ?? "AutoBat Partner";
-  const isLoading = summary === null;
+  const isLoading = summary === null && error === null;
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.screen}>
@@ -85,6 +101,15 @@ export default function HomeScreen() {
             <ActivityIndicator color={colors.brand} />
             <Text style={styles.loadingText}>Updating operations...</Text>
           </View>
+        ) : null}
+
+        {error ? (
+          <Pressable onPress={load} style={styles.errorBanner}>
+            <Text style={styles.errorText}>
+              Couldn&apos;t load your data: {error}
+            </Text>
+            <Text style={styles.errorRetry}>Tap to retry</Text>
+          </Pressable>
         ) : null}
 
         <View style={styles.statRow}>
@@ -138,8 +163,8 @@ export default function HomeScreen() {
           />
           <QuickAction
             icon={Truck}
-            label="Create claim"
-            onPress={() => router.push("/claims" as never)}
+            label="File a claim"
+            onPress={() => router.push("/file-claim" as never)}
           />
         </View>
 
@@ -238,6 +263,25 @@ const styles = StyleSheet.create({
   loadingText: {
     color: colors.inkSoft,
     fontSize: 12
+  },
+  errorBanner: {
+    backgroundColor: colors.badBg,
+    borderColor: "#fecaca",
+    borderRadius: 8,
+    borderWidth: 1,
+    marginHorizontal: 20,
+    padding: 12
+  },
+  errorText: {
+    color: colors.bad,
+    fontSize: 13,
+    fontWeight: "600"
+  },
+  errorRetry: {
+    color: colors.bad,
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 4
   },
   statRow: {
     flexDirection: "row",

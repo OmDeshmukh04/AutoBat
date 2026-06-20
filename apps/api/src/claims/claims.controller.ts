@@ -1,5 +1,13 @@
-import { Controller, Get, Req, UseGuards } from "@nestjs/common";
-import { AuthGuard, type AuthedRequest } from "../auth/auth.guard";
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Post,
+  Req,
+  UseGuards
+} from "@nestjs/common";
+import { AuthGuard, Roles, type AuthedRequest } from "../auth/auth.guard";
 import { PrismaService } from "../prisma/prisma.service";
 
 const STAGE_LABEL: Record<string, string> = {
@@ -56,5 +64,89 @@ export class ClaimsController {
       diagnostics: c.diagnostics,
       remarks: c.remarks
     }));
+  }
+
+  // --- DEALER / DISTRIBUTOR: file a new warranty claim for a battery ---
+  @Post()
+  @Roles("DEALER", "DISTRIBUTOR")
+  async create(
+    @Body()
+    body: { serialNumber?: string; customerMobile?: string; reason?: string; remarks?: string },
+    @Req() req: AuthedRequest
+  ) {
+    if (!body.serialNumber || !body.customerMobile || !body.reason) {
+      throw new BadRequestException(
+        "serialNumber, customerMobile, and reason are required"
+      );
+    }
+    if (!/^[6-9]\d{9}$/.test(body.customerMobile)) {
+      throw new BadRequestException("Invalid customer mobile");
+    }
+    if (!req.user.orgId) {
+      throw new BadRequestException("User has no organization");
+    }
+
+    const battery = await this.prisma.battery.findUnique({
+      where: { serialNumber: body.serialNumber },
+      include: { warranties: { orderBy: { createdAt: "desc" }, take: 1 } }
+    });
+    if (!battery) throw new BadRequestException("Unknown serial number");
+
+    const warranty = battery.warranties[0];
+    if (!warranty) {
+      throw new BadRequestException(
+        "No warranty registered for this battery; register the sale first"
+      );
+    }
+
+    // Block duplicate open claims on the same battery.
+    const existingOpen = await this.prisma.claim.findFirst({
+      where: {
+        batteryId: battery.id,
+        stage: { notIn: ["APPROVED", "REJECTED", "REPLACED"] }
+      }
+    });
+    if (existingOpen) {
+      throw new BadRequestException(
+        `An open claim (${existingOpen.reference}) already exists for this battery`
+      );
+    }
+
+    // SLA breached if the warranty is already past expiry at filing time.
+    const overSla = new Date() > warranty.expiryDate;
+    const reference = `CLM-${Date.now().toString().slice(-7)}`;
+
+    const claim = await this.prisma.claim.create({
+      data: {
+        reference,
+        batteryId: battery.id,
+        partnerId: req.user.orgId,
+        customerMobile: body.customerMobile,
+        reason: body.reason,
+        remarks: body.remarks ?? null,
+        stage: "SUBMITTED",
+        overSla
+      }
+    });
+
+    await this.prisma.battery.update({
+      where: { id: battery.id },
+      data: { status: "UNDER_CLAIM" }
+    });
+
+    const actor = await this.prisma.user.findUnique({
+      where: { id: req.user.sub }
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: req.user.sub,
+        actorLabel: actor?.name ?? req.user.role,
+        action: "filed a warranty claim",
+        entityType: "Claim",
+        entityId: reference
+      }
+    });
+
+    return { reference: claim.reference, stage: claim.stage, overSla };
   }
 }

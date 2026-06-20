@@ -68,25 +68,35 @@ export default function ClaimsScreen() {
   }, []);
 
   if (selected) {
+    const decide = async (stage: string) => {
+      setBusy(true);
+      try {
+        await api.decideClaim(selected.id, stage);
+        await load();
+      } catch (decideError) {
+        setError((decideError as Error).message);
+      } finally {
+        setBusy(false);
+      }
+    };
+    const isFinal =
+      selected.stage === "Approved" ||
+      selected.stage === "Rejected" ||
+      selected.stage === "Replaced";
     return (
       <ClaimDetail
         busy={busy}
         canAdvance={user?.role === "SERVICE" || user?.role === "ADMIN"}
+        canReject={
+          (user?.role === "SERVICE" || user?.role === "ADMIN") && !isFinal
+        }
         claim={selected}
         onBack={() => setSelected(null)}
-        onAdvance={async () => {
+        onAdvance={() => {
           const next = NEXT_STAGE[selected.stage];
-          if (!next) return;
-          setBusy(true);
-          try {
-            await api.decideClaim(selected.id, next.value);
-            await load();
-          } catch (advanceError) {
-            setError((advanceError as Error).message);
-          } finally {
-            setBusy(false);
-          }
+          if (next) void decide(next.value);
         }}
+        onReject={() => void decide("REJECTED")}
       />
     );
   }
@@ -161,14 +171,18 @@ function ClaimDetail({
   claim,
   busy,
   canAdvance,
+  canReject,
   onBack,
-  onAdvance
+  onAdvance,
+  onReject
 }: {
   claim: ClaimRow;
   busy: boolean;
   canAdvance: boolean;
+  canReject: boolean;
   onBack: () => void;
   onAdvance: () => void;
+  onReject: () => void;
 }) {
   const steps = ["Submitted", "Inspection", "Decision", "Replacement"];
   const currentIndex =
@@ -269,32 +283,44 @@ function ClaimDetail({
       </ScrollView>
 
       <View style={styles.bottomAction}>
-        <Pressable
-          disabled={busy || !canAdvance || !NEXT_STAGE[claim.stage]}
-          onPress={onAdvance}
-          style={[
-            styles.primaryButton,
-            (!canAdvance || !NEXT_STAGE[claim.stage]) &&
-              styles.primaryButtonDisabled
-          ]}
-        >
-          {busy ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <>
-              {canAdvance ? (
-                <ClipboardPlus color="#FFFFFF" size={23} strokeWidth={2} />
-              ) : (
-                <Clock3 color="#FFFFFF" size={23} strokeWidth={2} />
-              )}
-              <Text style={styles.primaryButtonText}>
-                {canAdvance
-                  ? NEXT_STAGE[claim.stage]?.label ?? "Claim completed"
-                  : "Inspection report pending"}
-              </Text>
-            </>
-          )}
-        </Pressable>
+        <View style={styles.actionRow}>
+          <Pressable
+            disabled={busy || !canAdvance || !NEXT_STAGE[claim.stage]}
+            onPress={onAdvance}
+            style={[
+              styles.primaryButton,
+              styles.actionFlex,
+              (!canAdvance || !NEXT_STAGE[claim.stage]) &&
+                styles.primaryButtonDisabled
+            ]}
+          >
+            {busy ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <>
+                {canAdvance ? (
+                  <ClipboardPlus color="#FFFFFF" size={22} strokeWidth={2} />
+                ) : (
+                  <Clock3 color="#FFFFFF" size={22} strokeWidth={2} />
+                )}
+                <Text style={styles.primaryButtonText}>
+                  {canAdvance
+                    ? NEXT_STAGE[claim.stage]?.label ?? "Claim completed"
+                    : "Inspection report pending"}
+                </Text>
+              </>
+            )}
+          </Pressable>
+          {canReject ? (
+            <Pressable
+              disabled={busy}
+              onPress={onReject}
+              style={styles.rejectButton}
+            >
+              <Text style={styles.rejectButtonText}>Reject</Text>
+            </Pressable>
+          ) : null}
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -545,6 +571,13 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     padding: 12
   },
+  actionRow: {
+    flexDirection: "row",
+    gap: 10
+  },
+  actionFlex: {
+    flex: 1
+  },
   primaryButton: {
     alignItems: "center",
     backgroundColor: colors.brand,
@@ -559,6 +592,20 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: "#FFFFFF",
+    fontSize: 15.5,
+    fontWeight: "800"
+  },
+  rejectButton: {
+    alignItems: "center",
+    borderColor: colors.bad,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    justifyContent: "center",
+    minHeight: 54,
+    paddingHorizontal: 20
+  },
+  rejectButtonText: {
+    color: colors.bad,
     fontSize: 15.5,
     fontWeight: "800"
   }
