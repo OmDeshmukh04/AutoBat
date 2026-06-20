@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "AutoBat Partner",
+    "slug": "autobat-partner",
+    "scheme": "autobat",
+    "version": "0.1.0",
+    "platforms": ["android", "ios"],
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": ["expo-router", "expo-secure-store", "expo-sqlite"],
+    "android": {
+      "package": "com.autobat.partner"
+    },
+    "ios": {
+      "bundleIdentifier": "com.autobat.partner"
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "name": "@autobat/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "dev": "expo start",
+    "build": "expo export",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@autobat/contracts": "workspace:*",
+    "@expo/metro-runtime": "^6.1.2",
+    "@tanstack/react-query": "^5.80.7",
+    "expo": "^54.0.35",
+    "expo-constants": "^18.0.13",
+    "expo-linking": "^8.0.12",
+    "expo-router": "^6.0.24",
+    "expo-secure-store": "^15.0.8",
+    "expo-sqlite": "^16.0.10",
+    "lucide-react-native": "0.468.0",
+    "react": "19.1.0",
+    "react-hook-form": "^7.58.0",
+    "react-native": "0.81.5",
+    "react-native-safe-area-context": "5.6.2",
+    "react-native-screens": "~4.16.0",
+    "react-native-svg": "15.12.1",
+    "zod": "^3.25.64",
+    "zustand": "^5.0.5"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.17",
+    "typescript": "^5.8.3"
+  }
+}

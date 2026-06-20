@@ -1,0 +1,193 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Supabase PostgreSQL is the shared development and production-ready datastore.
+// Enum-like columns remain strings so business values can evolve without
+// database enum migrations; @autobat/contracts remains the validation source.
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// OrganizationType: AUTOBAT | DISTRIBUTOR | DEALER | SERVICE_POINT | RECYCLER
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  type      String
+  code      String   @unique
+  region    String?
+  active    Boolean  @default(true)
+  // Inventory currently held by this organization (denormalized for fast reads).
+  stock     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  batteries      Battery[]
+  movementsFrom  StockMovement[] @relation("MovementFrom")
+  movementsTo    StockMovement[] @relation("MovementTo")
+  claims         Claim[]
+  users          User[]
+}
+
+// Role (RBAC): ADMIN | DISTRIBUTOR | DEALER | DELIVERY | SERVICE
+// ADMIN uses the web portal; the rest use the single mobile app, with screens
+// gated by role. The role string is the single source of truth for access.
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  mobile    String   @unique
+  email     String?  @unique
+  role      String
+  orgId     String?
+  active    Boolean  @default(true)
+  org       Organization? @relation(fields: [orgId], references: [id])
+  otps      OtpChallenge[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+}
+
+// Mock OTP challenge. In production the code is sent via SMS; here it is fixed
+// and returned/logged so the flow is testable without a provider.
+model OtpChallenge {
+  id        String   @id @default(cuid())
+  userId    String
+  code      String
+  expiresAt DateTime
+  consumed  Boolean  @default(false)
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Product {
+  id               String           @id @default(cuid())
+  sku              String           @unique
+  name             String
+  family           String
+  voltage          String?
+  capacity         String?
+  active           Boolean          @default(true)
+  batteries        Battery[]
+  warrantyPolicies WarrantyPolicy[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+}
+
+model WarrantyPolicy {
+  id                     String    @id @default(cuid())
+  productId              String
+  name                   String
+  version                Int
+  effectiveFrom          DateTime
+  effectiveTo            DateTime?
+  freeReplacementMonths  Int
+  totalWarrantyMonths    Int
+  registrationWindowDays Int
+  isDraft                Boolean   @default(true)
+  rules                  Json
+  product                Product   @relation(fields: [productId], references: [id])
+  warranties             Warranty[]
+  createdAt              DateTime  @default(now())
+
+  @@unique([productId, version])
+  @@index([productId, effectiveFrom])
+}
+
+// BatteryStatus: MANUFACTURED | IN_STOCK | IN_TRANSIT | SOLD | UNDER_CLAIM
+//              | REPLACED | RETURNED | RECYCLED
+model Battery {
+  id              String        @id @default(cuid())
+  serialNumber    String        @unique
+  qrValue         String?       @unique
+  productId       String
+  holderId        String?
+  manufactureDate DateTime?
+  status          String        @default("MANUFACTURED")
+  product         Product       @relation(fields: [productId], references: [id])
+  holder          Organization? @relation(fields: [holderId], references: [id])
+  warranties      Warranty[]
+  claims          Claim[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([status])
+  @@index([holderId])
+}
+
+// WarrantyStatus: PENDING | ACTIVE | EXPIRED | VOID | REPLACED
+model Warranty {
+  id                     String         @id @default(cuid())
+  batteryId              String
+  policyId               String
+  customerMobile         String
+  purchaseDate           DateTime
+  activationDate         DateTime
+  freeReplacementEndDate DateTime
+  expiryDate             DateTime
+  policySnapshot         Json
+  status                 String         @default("ACTIVE")
+  // Backdated registrations land here for admin review.
+  backdated              Boolean        @default(false)
+  registrationDelayDays  Int            @default(0)
+  battery                Battery        @relation(fields: [batteryId], references: [id])
+  policy                 WarrantyPolicy @relation(fields: [policyId], references: [id])
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  @@index([customerMobile])
+  @@index([batteryId, status])
+}
+
+// MovementType: DISPATCH | TRANSFER | SALE | RETURN | RECYCLE
+model StockMovement {
+  id           String       @id @default(cuid())
+  type         String
+  fromOrgId    String?
+  toOrgId      String?
+  quantity     Int
+  reference    String?
+  fromOrg      Organization? @relation("MovementFrom", fields: [fromOrgId], references: [id])
+  toOrg        Organization? @relation("MovementTo", fields: [toOrgId], references: [id])
+  createdAt    DateTime     @default(now())
+
+  @@index([type])
+}
+
+// ClaimStage: SUBMITTED | UNDER_REVIEW | FIELD_TEST | APPROVED | REJECTED | REPLACED
+model Claim {
+  id             String       @id @default(cuid())
+  reference      String       @unique
+  batteryId      String
+  partnerId      String
+  customerMobile String
+  reason         String
+  stage          String       @default("SUBMITTED")
+  overSla        Boolean      @default(false)
+  inspectionScheduledAt DateTime?
+  diagnostics    Json?
+  remarks        String?
+  evidence       Json?
+  battery        Battery      @relation(fields: [batteryId], references: [id])
+  partner        Organization @relation(fields: [partnerId], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([stage])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actorLabel String?
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+}

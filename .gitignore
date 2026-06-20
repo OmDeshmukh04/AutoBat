@@ -1,0 +1,18 @@
+node_modules/
+.turbo/
+.expo/
+.next/
+dist/
+coverage/
+.env
+.env.local
+*.log
+*.tsbuildinfo
+
+# Local SQLite database
+*.db
+*.db-journal
+
+# Local resource intake can include confidential material.
+resources/private/
+

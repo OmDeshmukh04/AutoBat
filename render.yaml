@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: autobat-api
+    runtime: node
+    plan: free
+    region: singapore
+    # Build the whole workspace from the repo root so the @autobat/contracts
+    # workspace dependency is built (turbo `^build`) before the API, and the
+    # Prisma client is generated against the deployed schema.
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @autobat/api build && pnpm --filter @autobat/api exec prisma generate
+    startCommand: node apps/api/dist/main.js
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Set DATABASE_URL in the Render dashboard (do NOT commit it).
+      # Use the Supabase transaction pooler (port 6543) with pgbouncer flags:
+      #   postgresql://postgres.<ref>:<password>@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres?sslmode=require&pgbouncer=true&connection_limit=1
+      - key: DATABASE_URL
+        sync: false
