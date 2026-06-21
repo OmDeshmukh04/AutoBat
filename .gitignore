@@ -16,3 +16,6 @@ coverage/
 # Local resource intake can include confidential material.
 resources/private/
 
+# Scratch / temporary working files
+tmp/
+
