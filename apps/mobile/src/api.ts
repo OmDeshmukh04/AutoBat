@@ -8,7 +8,30 @@ import { useAuthStore } from "./auth-store";
 declare const process: { env: Record<string, string | undefined> };
 
 export const API_BASE =
-  process.env.EXPO_PUBLIC_API_BASE ?? "http://localhost:3001/api/v1";
+  (process.env.EXPO_PUBLIC_API_BASE ?? "http://localhost:3001/api/v1").replace(
+    /\/+$/,
+    ""
+  );
+
+const REQUEST_TIMEOUT_MS = 45_000;
+
+function connectionError(error: unknown): Error {
+  if (error instanceof Error && error.name === "AbortError") {
+    return new Error(
+      "The AutoBat server is taking too long to respond. Please try again shortly."
+    );
+  }
+
+  if (/^http:\/\/(localhost|127\.0\.0\.1)(:|\/)/.test(API_BASE)) {
+    return new Error(
+      "This app is connected to localhost, which a physical phone cannot reach. Install a build configured with the public API URL."
+    );
+  }
+
+  return new Error(
+    "Cannot reach the AutoBat server. Check your internet connection and try again."
+  );
+}
 
 async function request<T>(
   path: string,
@@ -22,18 +45,38 @@ async function request<T>(
     if (token) headers.Authorization = `Bearer ${token}`;
   }
 
-  const init: RequestInit = { method, headers };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const init: RequestInit = { method, headers, signal: controller.signal };
   if (body !== undefined) {
     init.body = JSON.stringify(body);
   }
 
-  const res = await fetch(`${API_BASE}${path}`, init);
+  try {
+    const res = await fetch(`${API_BASE}${path}`, init);
 
-  if (!res.ok) {
-    const detail = await res.json().catch(() => ({}));
-    throw new Error(detail.message ?? `Request failed (${res.status})`);
+    if (!res.ok) {
+      if ([502, 503, 504].includes(res.status)) {
+        throw new Error(
+          "The AutoBat server is temporarily unavailable. Please try again shortly."
+        );
+      }
+      const detail = await res.json().catch(() => ({}));
+      throw new Error(detail.message ?? `Request failed (${res.status})`);
+    }
+    return res.json() as Promise<T>;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.name !== "AbortError" &&
+      !(error instanceof TypeError)
+    ) {
+      throw error;
+    }
+    throw connectionError(error);
+  } finally {
+    clearTimeout(timeout);
   }
-  return res.json() as Promise<T>;
 }
 
 export const api = {
